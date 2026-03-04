@@ -17,8 +17,9 @@ namespace RDETSApp
             string apiUrl = "https://your-api-endpoint"; // TODO: Replace with your actual API endpoint
             string barcodeApiUrl = "https://your-barcode-api-endpoint"; // TODO: Replace with your actual barcode API endpoint
 
+            // Collect all records to process
             var recordList = new List<(string dubKey, string cstKey, string country, string nationality)>();
-            // Read all records first
+            // Read all records from the database first (sequential)
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
                 await conn.OpenAsync();
@@ -37,37 +38,41 @@ namespace RDETSApp
                 }
             }
 
-            // Process all records in parallel
+            // Process all records in parallel using Task.Run and Task.WhenAll
+            // Each record is handled in its own task, with its own DB connection and API calls
+            // This allows multiple records to be processed concurrently, improving throughput
             var tasks = new List<Task>();
             foreach (var record in recordList)
             {
                 tasks.Add(Task.Run(async () =>
                 {
+                    // Each task uses its own SqlConnection to avoid conflicts
                     using (SqlConnection conn = new SqlConnection(connectionString))
                     {
                         await conn.OpenAsync();
-                        // 1. Set status to OrderID_Processing
+                        // Step 1: Set status to OrderID_Processing
                         await UpdateStatusAsync(conn, record.dubKey, "OrderID_Processing");
 
-                        // 2. Call API to get DET_OrderID
+                        // Step 2: Call API to get DET_OrderID
                         string detOrderId = await GetDetOrderIdAsync(apiUrl, record.cstKey, record.country, record.nationality);
                         Console.WriteLine($"DET_OrderID: {detOrderId}");
 
-                        // 3. Set status to OrderID_Received and update DET_OrderID field
+                        // Step 3: Set status to OrderID_Received and update DET_OrderID field
                         await UpdateStatusAndOrderIdAsync(conn, record.dubKey, "OrderID_Received", detOrderId);
 
-                        // 4. Set status to BarCode_Processing
+                        // Step 4: Set status to BarCode_Processing
                         await UpdateStatusAsync(conn, record.dubKey, "BarCode_Processing");
 
-                        // 5. Call API to get dub_barcode
+                        // Step 5: Call API to get dub_barcode
                         string dubBarcode = await GetDubBarcodeAsync(barcodeApiUrl, detOrderId);
                         Console.WriteLine($"dub_barcode: {dubBarcode}");
 
-                        // 6. Set status to Processed and update dub_barcode field
+                        // Step 6: Set status to Processed and update dub_barcode field
                         await UpdateStatusAndBarcodeAsync(conn, record.dubKey, "Processed", dubBarcode);
                     }
                 }));
             }
+            // Wait for all parallel tasks to complete
             await Task.WhenAll(tasks);
         static async Task UpdateStatusAndBarcodeAsync(SqlConnection conn, string dubKey, string status, string dubBarcode)
         {
