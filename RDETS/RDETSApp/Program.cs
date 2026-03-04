@@ -17,6 +17,8 @@ namespace RDETSApp
             string apiUrl = "https://your-api-endpoint"; // TODO: Replace with your actual API endpoint
             string barcodeApiUrl = "https://your-barcode-api-endpoint"; // TODO: Replace with your actual barcode API endpoint
 
+            var recordList = new List<(string dubKey, string cstKey, string country, string nationality)>();
+            // Read all records first
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
                 await conn.OpenAsync();
@@ -25,28 +27,48 @@ namespace RDETSApp
                 {
                     while (await reader.ReadAsync())
                     {
-                        var dubKey = reader["dub_key"].ToString();
-                        var cstKey = reader["dub_reg_cst_key"].ToString();
-                        var country = reader["dub_country_of_residence"].ToString();
-                        var nationality = reader["dub_nationality"].ToString();
+                        recordList.Add((
+                            reader["dub_key"].ToString(),
+                            reader["dub_reg_cst_key"].ToString(),
+                            reader["dub_country_of_residence"].ToString(),
+                            reader["dub_nationality"].ToString()
+                        ));
+                    }
+                }
+            }
 
+            // Process all records in parallel
+            var tasks = new List<Task>();
+            foreach (var record in recordList)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    using (SqlConnection conn = new SqlConnection(connectionString))
+                    {
+                        await conn.OpenAsync();
                         // 1. Set status to OrderID_Processing
-                        await UpdateStatusAsync(conn, dubKey, "OrderID_Processing");
+                        await UpdateStatusAsync(conn, record.dubKey, "OrderID_Processing");
 
-                        string detOrderId = await GetDetOrderIdAsync(apiUrl, cstKey, country, nationality);
+                        // 2. Call API to get DET_OrderID
+                        string detOrderId = await GetDetOrderIdAsync(apiUrl, record.cstKey, record.country, record.nationality);
                         Console.WriteLine($"DET_OrderID: {detOrderId}");
 
-                        // 2. Set status to OrderID_Received and update DET_OrderID field
-                        await UpdateStatusAndOrderIdAsync(conn, dubKey, "OrderID_Received", detOrderId);
+                        // 3. Set status to OrderID_Received and update DET_OrderID field
+                        await UpdateStatusAndOrderIdAsync(conn, record.dubKey, "OrderID_Received", detOrderId);
 
-                        // 3. Set status to BarCode_Processing
-                        await UpdateStatusAsync(conn, dubKey, "BarCode_Processing");
+                        // 4. Set status to BarCode_Processing
+                        await UpdateStatusAsync(conn, record.dubKey, "BarCode_Processing");
 
+                        // 5. Call API to get dub_barcode
                         string dubBarcode = await GetDubBarcodeAsync(barcodeApiUrl, detOrderId);
                         Console.WriteLine($"dub_barcode: {dubBarcode}");
 
-                        // 4. Set status to Processed and update dub_barcode field
-                        await UpdateStatusAndBarcodeAsync(conn, dubKey, "Processed", dubBarcode);
+                        // 6. Set status to Processed and update dub_barcode field
+                        await UpdateStatusAndBarcodeAsync(conn, record.dubKey, "Processed", dubBarcode);
+                    }
+                }));
+            }
+            await Task.WhenAll(tasks);
         static async Task UpdateStatusAndBarcodeAsync(SqlConnection conn, string dubKey, string status, string dubBarcode)
         {
             string updateQuery = "UPDATE YourTableName SET dub_registration_processing_status = @status, dub_barcode = @dubBarcode WHERE dub_key = @dubKey";
