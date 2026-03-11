@@ -1,0 +1,6 @@
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.csproj.AssemblyReference.cache
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.GeneratedMSBuildEditorConfig.editorconfig
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.AssemblyInfoInputs.cache
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.AssemblyInfo.cs
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.csproj.CoreCompileInputs.cache
+C:\Nikhil\Code\RDETS\RDETSApp\obj\Debug\net6.0\RDETSApp.sourcelink.json

@@ -5,8 +5,10 @@ using System.Text.Json;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Timer;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
 namespace RDETSApp.Functions
@@ -23,7 +25,7 @@ namespace RDETSApp.Functions
         }
 
         [FunctionName("DetWorkflowTimer")]
-        public async Task Run([TimerTrigger("0 0 * * * *")]TimerInfo myTimer, ILogger log)
+        public async Task Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, ILogger log)
         {
             // Load configuration
             string connectionString = _config["SqlConnectionString"];
@@ -60,10 +62,10 @@ namespace RDETSApp.Functions
                     while (await reader.ReadAsync())
                     {
                         var record = (
-                            dubKey: reader["dub_key"].ToString(),
-                            cstKey: reader["dub_reg_cst_key"].ToString(),
-                            country: reader["dub_country_of_residence"].ToString(),
-                            nationality: reader["dub_nationality"].ToString()
+                            dubKey: reader["dub_key"]?.ToString() ?? string.Empty,
+                            cstKey: reader["dub_reg_cst_key"]?.ToString() ?? string.Empty,
+                            country: reader["dub_country_of_residence"]?.ToString() ?? string.Empty,
+                            nationality: reader["dub_nationality"]?.ToString() ?? string.Empty
                         );
                         tasks.Add(ProcessRecordAsync(record, connectionString, apiBaseUrl, accessToken, blueBoxDetails, log));
                     }
@@ -114,20 +116,20 @@ namespace RDETSApp.Functions
         }
 
         // --- Helper methods adapted for Azure Functions ---
-        private async Task<string> RetrieveTokenAsync(string apiBaseUrl, string clientId, string clientSecret)
+        private async Task<string?> RetrieveTokenAsync(string apiBaseUrl, string clientId, string clientSecret)
         {
             var client = _httpClientFactory.CreateClient();
             var payload = new { client_id = clientId, client_secret = clientSecret };
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{apiBaseUrl}/token", content);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return string.Empty;
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
-            return result != null && result.ContainsKey("access_token") ? result["access_token"] : null;
+            return result != null && result.ContainsKey("access_token") ? result["access_token"] : string.Empty;
         }
 
-        private async Task<Dictionary<string, object>> GetPerfMapAsync(string apiBaseUrl, string accessToken, string perfCode)
+        private async Task<Dictionary<string, object>?> GetPerfMapAsync(string apiBaseUrl, string accessToken, string perfCode)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -140,20 +142,20 @@ namespace RDETSApp.Functions
             return JsonSerializer.Deserialize<Dictionary<string, object>>(responseBody);
         }
 
-        private async Task<string> CreateBasketAsync(string apiBaseUrl, string accessToken, Dictionary<string, object> blueBoxDetails)
+        private async Task<string?> CreateBasketAsync(string apiBaseUrl, string accessToken, Dictionary<string, object> blueBoxDetails)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
             var json = JsonSerializer.Serialize(blueBoxDetails);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{apiBaseUrl}/create-basket", content);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return string.Empty;
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
-            return result != null && result.ContainsKey("basket_id") ? result["basket_id"] : null;
+            return result != null && result.ContainsKey("basket_id") ? result["basket_id"] : string.Empty;
         }
 
-        private async Task<string> CreateCustomerAsync(string apiBaseUrl, string accessToken, string country, string nationality)
+        private async Task<string?> CreateCustomerAsync(string apiBaseUrl, string accessToken, string country, string nationality)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -161,13 +163,13 @@ namespace RDETSApp.Functions
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{apiBaseUrl}/create-customer", content);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return string.Empty;
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
-            return result != null && result.ContainsKey("customer_id") ? result["customer_id"] : null;
+            return result != null && result.ContainsKey("customer_id") ? result["customer_id"] : string.Empty;
         }
 
-        private async Task<string> PurchaseBasketAsync(string apiBaseUrl, string accessToken, string basketId, string customerId)
+        private async Task<string?> PurchaseBasketAsync(string apiBaseUrl, string accessToken, string basketId, string customerId)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -175,13 +177,13 @@ namespace RDETSApp.Functions
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{apiBaseUrl}/purchase-basket", content);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return string.Empty;
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
-            return result != null && result.ContainsKey("order_id") ? result["order_id"] : null;
+            return result != null && result.ContainsKey("order_id") ? result["order_id"] : string.Empty;
         }
 
-        private async Task<string> GetOrderDetailAsync(string apiBaseUrl, string accessToken, string orderId)
+        private async Task<string?> GetOrderDetailAsync(string apiBaseUrl, string accessToken, string orderId)
         {
             var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -189,10 +191,10 @@ namespace RDETSApp.Functions
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync($"{apiBaseUrl}/get-order-detail", content);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return string.Empty;
             var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
-            return result != null && result.ContainsKey("barcode") ? result["barcode"] : null;
+            return result != null && result.ContainsKey("barcode") ? result["barcode"] : string.Empty;
         }
 
         private async Task UpdateStatusAsync(SqlConnection conn, string dubKey, string status)
